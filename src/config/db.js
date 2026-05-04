@@ -1,6 +1,7 @@
 const { Client } = require("pg");
+const { PG_CONNECTION_STRING } = require("./env");
 
-const connectionString = "postgresql://mac@localhost:5432/url_shortener";
+const connectionString = PG_CONNECTION_STRING
 
 const client = new Client({
   connectionString,
