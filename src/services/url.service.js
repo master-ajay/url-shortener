@@ -22,6 +22,12 @@ async function createShortUrl(url, retriedTimes = 0) {
     throw new Error("Failed to insert after 10 retries");
   }
 
+  const isUrlValid = isValidUrl(url);
+
+  if (!isUrlValid) {
+    throw new Error("Invalid URL");
+  }
+
   const code = await getCode();
 
   try {
@@ -48,3 +54,12 @@ async function getOriginalUrl(code) {
 }
 
 module.exports = { createShortUrl, getOriginalUrl };
+
+function isValidUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}

@@ -23,8 +23,8 @@ const gracefulshutdown = (signal) => {
       process.exit(1);
     }
 
-    console.log("All existing requests completed. Server closed.");
     db.end();
+    console.log("All existing requests completed. Server closed.");
     process.exit(0);
   });
 

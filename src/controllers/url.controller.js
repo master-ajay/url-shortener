@@ -3,6 +3,7 @@ const { createShortUrl, getOriginalUrl } = require("../services/url.service");
 
 async function shorten(req, res, next) {
   const { url } = req.body;
+  console.log(url)
   if (!url) {
     return res.status(400).json({ error: "url is required" });
   }
@@ -11,7 +12,10 @@ async function shorten(req, res, next) {
     res.status(201).json({ code, short_url: `${BASE_URL}/${code}` });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "something went wrong" });
+    if (error.message === "Invalid URL") {
+      return res.status(400).json({ error: "Invalid URL" });
+    }
+    return res.status(500).json({ error: "something went wrong" });
   }
 }
 
