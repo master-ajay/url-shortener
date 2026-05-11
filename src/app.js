@@ -5,6 +5,7 @@ const rateLimit = require("express-rate-limit");
 
 const app = express();
 
+//TODO: update in production to use different
 // app.set("trust proxy", 1);
 
 const limiter = rateLimit({
