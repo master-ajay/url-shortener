@@ -1,22 +1,24 @@
 const express = require("express");
 const routes = require("./routes/url.routes");
 const morgan = require("morgan");
-const rateLimit = require("express-rate-limit");
+const limiter = require("./middleware/rateLimiter");
 
 const app = express();
 
 //TODO: update in production to use different
 // app.set("trust proxy", 1);
 
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: "Too many requests, please try again later.",
-});
+app.use(cors({ origin: process.env.CORS_ORIGIN, credentials: true }));
 
 app.use(limiter);
 
-app.use(express.json());
+app.use(express.json({ limit: "16KB" }));
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: "16kb",
+  }),
+);
 
 app.use(morgan("dev"));
 
