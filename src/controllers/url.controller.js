@@ -1,33 +1,32 @@
 const { BASE_URL } = require("../config/env");
 const { createShortUrl, getOriginalUrl } = require("../services/url.service");
 
-async function shorten(req, res, next) {
+const shorten = asyncHandler(async (req, res) => {
   const { url } = req.body;
-  console.log(url)
-  if (!url) {
-    return res.status(400).json({ error: "url is required" });
-  }
-  try {
-    const code = await createShortUrl(url);
-    res.status(201).json({ code, short_url: `${BASE_URL}/${code}` });
-  } catch (error) {
-    console.error(error);
-    if (error.message === "Invalid URL") {
-      return res.status(400).json({ error: "Invalid URL" });
-    }
-    return res.status(500).json({ error: "something went wrong" });
-  }
-}
 
-async function redirect(req, res, next) {
+  if (!url) {
+    throw new ApiError(400, "url is required");
+  }
+
+  const code = await createShortUrl(url);
+
+  res.status(201).json({
+    success: true,
+    code,
+    short_url: `${BASE_URL}/${code}`,
+  });
+});
+
+const redirect = asyncHandler(async (req, res) => {
   const { code } = req.params;
+
   const original_url = await getOriginalUrl(code);
 
   if (!original_url) {
-    return res.status(404).json({ error: "code not found" });
+    throw new ApiError(404, "code not found");
   }
 
   return res.redirect(301, original_url);
-}
+});
 
 module.exports = { shorten, redirect };

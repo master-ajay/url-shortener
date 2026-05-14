@@ -2,6 +2,7 @@ const express = require("express");
 const routes = require("./routes/url.routes");
 const morgan = require("morgan");
 const limiter = require("./middleware/rateLimiter");
+const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
 
@@ -25,5 +26,7 @@ app.use(morgan("dev"));
 app.get("/health", (req, res) => res.json({ status: "ok", pid: process.pid }));
 
 app.use("/", routes);
+
+app.use(errorHandler);
 
 module.exports = app;
