@@ -1,20 +1,24 @@
 const { BASE_URL } = require("../config/env");
 const { createShortUrl, getOriginalUrl } = require("../services/url.service");
+const asyncHandler = require("../utils/asynchandler");
+const ApiError = require("../utils/ApiError");
+
+const { shortenResponseSchema } = require("../validators/url.validator");
 
 const shorten = asyncHandler(async (req, res) => {
   const { url } = req.body;
 
-  if (!url) {
-    throw new ApiError(400, "url is required");
-  }
-
   const code = await createShortUrl(url);
 
-  res.status(201).json({
+  const response = {
     success: true,
     code,
     short_url: `${BASE_URL}/${code}`,
-  });
+  };
+
+  shortenResponseSchema.parse(response);
+
+  res.status(201).json(response);
 });
 
 const redirect = asyncHandler(async (req, res) => {
