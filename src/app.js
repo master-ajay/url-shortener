@@ -1,19 +1,37 @@
 const express = require("express");
+const cors = require("cors");
+
 const routes = require("./routes/url.routes");
-const morgan = require("morgan");
 const limiter = require("./middleware/rateLimiter");
 const errorHandler = require("./middleware/errorHandler");
+const httpLogger = require("./middleware/httpLogger");
+const requestId = require("./middleware/requestId");
 
 const app = express();
 
-//TODO: update in production to use different
+// Trust proxy in production (if behind nginx/render/heroku/etc.)
 // app.set("trust proxy", 1);
 
-app.use(cors({ origin: process.env.CORS_ORIGIN, credentials: true }));
+// Request ID middleware
+app.use(requestId);
 
+// Logger middleware
+app.use(httpLogger);
+
+// Rate limiter
 app.use(limiter);
 
-app.use(express.json({ limit: "16KB" }));
+// CORS
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGIN,
+    credentials: true,
+  }),
+);
+
+// Body parsers
+app.use(express.json({ limit: "16kb" }));
+
 app.use(
   express.urlencoded({
     extended: true,
@@ -21,12 +39,18 @@ app.use(
   }),
 );
 
-app.use(morgan("dev"));
+// Health route
+app.get("/health", (req, res) => {
+  res.json({
+    status: "ok",
+    pid: process.pid,
+  });
+});
 
-app.get("/health", (req, res) => res.json({ status: "ok", pid: process.pid }));
-
+// Routes
 app.use("/", routes);
 
+// Global error handler
 app.use(errorHandler);
 
 module.exports = app;
