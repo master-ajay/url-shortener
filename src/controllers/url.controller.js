@@ -19,8 +19,6 @@ const shorten = asyncHandler(async (req, res) => {
 
   shortenResponseSchema.parse(response);
 
-  
-
   res.status(response.statusCode).json(response);
 });
 
