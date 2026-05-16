@@ -11,13 +11,17 @@ const shorten = asyncHandler(async (req, res) => {
 
   const code = await createShortUrl(url);
 
-  const response = new ApiResponse(201, {
+  const responseData = {
     code,
     short_url: `${BASE_URL}/${code}`,
     success: true,
-  });
+  };
 
-  shortenResponseSchema.parse(response);
+  shortenResponseSchema.parse(responseData);
+
+  const response = new ApiResponse(201, {
+    ...responseData,
+  });
 
   res.status(response.statusCode).json(response);
 });

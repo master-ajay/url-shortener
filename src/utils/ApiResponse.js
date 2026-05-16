@@ -8,3 +8,5 @@ class ApiResponse {
     Object.freeze(this);
   }
 }
+
+module.exports = ApiResponse;
