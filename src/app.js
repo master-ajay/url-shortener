@@ -6,11 +6,14 @@ const limiter = require("./middleware/rateLimiter");
 const errorHandler = require("./middleware/errorHandler");
 const httpLogger = require("./middleware/httpLogger");
 const requestId = require("./middleware/requestId");
+const helmet = require("helmet")
 
 const app = express();
 
 // Trust proxy in production (if behind nginx/render/heroku/etc.)
 // app.set("trust proxy", 1);
+
+app.use(helmet())
 
 // Request ID middleware
 app.use(requestId);
