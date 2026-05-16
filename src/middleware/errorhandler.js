@@ -1,18 +1,18 @@
 const logger = require("../lib/logger");
 
 const errorHandler = (err, req, res, next) => {
-  err.statusCode = err.statusCode || 500;
+  const statusCode = err.statusCode || 500;
 
   logger.error({
     success: false,
     message: err.message,
-    status: err.status,
+    statusCode,
   });
 
-  res.status(err.statusCode).json({
+  res.status(statusCode).json({
     success: false,
     message: err.message,
-    status: err.status,
+    statusCode,
   });
 };
 

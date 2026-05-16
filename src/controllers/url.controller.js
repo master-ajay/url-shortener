@@ -2,6 +2,7 @@ const { BASE_URL } = require("../config/env");
 const { createShortUrl, getOriginalUrl } = require("../services/url.service");
 const asyncHandler = require("../utils/asynchandler");
 const ApiError = require("../utils/ApiError");
+const ApiResponse = require("../utils/ApiResponse");
 
 const { shortenResponseSchema } = require("../validators/url.validator");
 
@@ -18,7 +19,12 @@ const shorten = asyncHandler(async (req, res) => {
 
   shortenResponseSchema.parse(response);
 
-  res.status(201).json(response);
+  const response = new ApiResponse(201, {
+    code,
+    short_url: `${BASE_URL}/${code}`,
+  });
+
+  res.status(response.statusCode).json(response);
 });
 
 const redirect = asyncHandler(async (req, res) => {

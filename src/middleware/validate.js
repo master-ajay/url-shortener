@@ -10,13 +10,15 @@ const validate = (schema) => (req, res, next) => {
     next();
   } catch (error) {
     if (error instanceof ZodError) {
-      return res.status(400).json({
+      const response = new ApiResponse(400, {
         success: false,
         errors: error.errors.map((err) => ({
           field: err.path.join("."),
           message: err.message,
         })),
       });
+
+      return res.status(response.statusCode).json(response);
     }
 
     next(error);
