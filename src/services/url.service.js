@@ -4,14 +4,7 @@ async function getCode() {
   for (let i = 0; i < 10; i++) {
     const code = Math.random().toString(36).slice(2, 8);
 
-    const result = await db.query(
-      "SELECT 1 FROM create_urls WHERE short_code = $1",
-      [code],
-    );
-
-    if (result.rows.length === 0) {
-      return code;
-    }
+    return code;
   }
 
   throw new Error("Failed to generate unique code");
