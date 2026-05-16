@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const base62 = require("../utils/base62");
 
 async function createShortUrl(url, retriedTimes = 0) {
   if (retriedTimes === 10) {
@@ -11,7 +12,7 @@ async function createShortUrl(url, retriedTimes = 0) {
     throw new Error("Invalid URL");
   }
 
-  const code = Math.random().toString(36).slice(2, 8);
+  const code = base62(Math.floor(Math.random() * 1000000000));
 
   try {
     await db.query(
