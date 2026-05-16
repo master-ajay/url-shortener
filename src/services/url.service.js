@@ -1,15 +1,5 @@
 const db = require("../config/db");
 
-async function getCode() {
-  for (let i = 0; i < 10; i++) {
-    const code = Math.random().toString(36).slice(2, 8);
-
-    return code;
-  }
-
-  throw new Error("Failed to generate unique code");
-}
-
 async function createShortUrl(url, retriedTimes = 0) {
   if (retriedTimes === 10) {
     throw new Error("Failed to insert after 10 retries");
@@ -21,11 +11,11 @@ async function createShortUrl(url, retriedTimes = 0) {
     throw new Error("Invalid URL");
   }
 
-  const code = await getCode();
+  const code = Math.random().toString(36).slice(2, 8);
 
   try {
     await db.query(
-      "INSERT INTO create_urls (short_code,original_url) VALUES ($1, $2)",
+      "INSERT INTO short_urls (short_code,original_url) VALUES ($1, $2)",
       [code, url],
     );
     return code;
@@ -39,7 +29,7 @@ async function createShortUrl(url, retriedTimes = 0) {
 
 async function getOriginalUrl(code) {
   const result = await db.query(
-    "SELECT original_url FROM create_urls WHERE short_code = $1",
+    "SELECT original_url FROM short_urls WHERE short_code = $1",
     [code],
   );
 
