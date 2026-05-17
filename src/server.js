@@ -2,7 +2,7 @@ const app = require("./app.js");
 const { PORT } = require("./config/env");
 const db = require("./config/db.js");
 
-db.connect()
+db.query("SELECT 1")
   .then(() => {
     console.log("Connected to url_shortener db");
   })
