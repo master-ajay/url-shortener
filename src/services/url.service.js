@@ -1,5 +1,6 @@
 const db = require("../config/db");
 const base62 = require("../utils/base62");
+const  isValidUrl  = require("../utils/isValidUrl");
 
 async function createShortUrl(url, retriedTimes = 0) {
   if (retriedTimes === 10) {
@@ -38,12 +39,3 @@ async function getOriginalUrl(code) {
 }
 
 module.exports = { createShortUrl, getOriginalUrl };
-
-function isValidUrl(url) {
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
-}

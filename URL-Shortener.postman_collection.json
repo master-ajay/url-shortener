@@ -1,0 +1,174 @@
+{
+  "info": {
+    "_postman_id": "url-shortener-collection",
+    "name": "URL Shortener API",
+    "description": "URL Shortener Service - Create and redirect short URLs",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Shorten URL",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 201', function() {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test('Response has success flag', function() {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "    pm.expect(jsonData.data.success).to.be.true;",
+              "});",
+              "",
+              "pm.test('Response has short_url', function() {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData.data).to.have.property('short_url');",
+              "    pm.expect(jsonData.data).to.have.property('code');",
+              "});",
+              "",
+              "pm.test('Short code format is valid', function() {",
+              "    const jsonData = pm.response.json();",
+              "    const code = jsonData.data.code;",
+              "    pm.expect(code).to.match(/^[a-zA-Z0-9]{5,}$/);",
+              "});",
+              "",
+              "// Save short code for redirect test",
+              "const jsonData = pm.response.json();",
+              "pm.environment.set('short_code', jsonData.data.code);"
+            ]
+          }
+        },
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Generate timestamp for unique URLs",
+              "const timestamp = new Date().getTime();",
+              "pm.environment.set('timestamp', timestamp);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"url\": \"https://www.example.com/very/long/url/path?param1=value1&param2=value2\"}"
+        },
+        "url": {
+          "raw": "{{base_url}}/shorten",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "shorten"
+          ]
+        },
+        "description": "Create a shortened URL"
+      },
+      "response": []
+    },
+    {
+      "name": "Redirect to Original URL",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 301 or 302', function() {",
+              "    pm.expect([301, 302]).to.include(pm.response.code);",
+              "});",
+              "",
+              "pm.test('Location header exists', function() {",
+              "    pm.response.to.have.header('location');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/{{short_code}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "{{short_code}}"
+          ]
+        },
+        "description": "Redirect to original URL using short code"
+      },
+      "response": []
+    },
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/health",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "health"
+          ]
+        },
+        "description": "Check if API is running"
+      },
+      "response": []
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Pre-request setup"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global test setup"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "short_code",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "timestamp",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
