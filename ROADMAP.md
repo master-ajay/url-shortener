@@ -206,13 +206,12 @@ This isn't extra ceremony — it's what a reviewer checks before approving a PR 
 - [x] S1-T4: Request logging via `pino-http`
 - [x] S1-T5: Add Helmet
 - [x] S1-T6: `express-rate-limit` middleware
-- [ ] S1-T7: Jest + Supertest suite, to the SDE2 bar above:
-  - [ ] Unit: `isValidUrl` (valid http/https, invalid protocol, malformed string)
-  - [ ] Unit: `createShortUrl` retry-on-collision (mock `db.query` to throw `23505` once then succeed; exhausts after 10 retries)
-  - [ ] Integration: `POST /shorten` happy path (201 + shape matches `shortenResponseSchema`)
-  - [ ] Integration: `POST /shorten` 400 on missing/malformed url
-  - [ ] Integration: `GET /:code` 301 redirect on hit, 404 on miss, 400 on code length validation
-  - [ ] Integration: 429 after exceeding rate limit window
+- [x] S1-T7: Jest + Supertest suite, to the SDE2 bar above (19 tests, 5 suites, all passing):
+  - [x] Unit: `isValidUrl` (valid http/https, invalid protocol, malformed string, empty string)
+  - [x] Unit: `base62` (zero case, single-char, multi-char carry)
+  - [x] Integration: `POST /shorten` happy path, 400 missing/invalid url, 500 on DB failure, retry-on-collision (succeeds on 2nd try), exhausts after 10 retries
+  - [x] Integration: `GET /:code` 301 on hit, 404 on miss, 400 on code too short/long
+  - [x] Integration: 429 after exceeding rate limit window
 - [ ] S1-T8: First stress test with `autocannon` — record p50/p95/p99 + error rate at 100 / 500 / 1000 RPS
 
 ### Interview Concepts (Stage 1)
