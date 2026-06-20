@@ -206,13 +206,34 @@ This isn't extra ceremony — it's what a reviewer checks before approving a PR 
 - [x] S1-T4: Request logging via `pino-http`
 - [x] S1-T5: Add Helmet
 - [x] S1-T6: `express-rate-limit` middleware
-- [x] S1-T7: Jest + Supertest suite, to the SDE2 bar above (19 tests, 5 suites, all passing):
+- [x] S1-T7: Jest + Supertest suite, to the SDE2 bar above (20 tests, 5 suites, all passing):
   - [x] Unit: `isValidUrl` (valid http/https, invalid protocol, malformed string, empty string)
   - [x] Unit: `base62` (zero case, single-char, multi-char carry)
-  - [x] Integration: `POST /shorten` happy path, 400 missing/invalid url, 500 on DB failure, retry-on-collision (succeeds on 2nd try), exhausts after 10 retries
+  - [x] Integration: `POST /shorten` happy path, 400 missing/invalid url, 400 unsupported scheme (`ftp://`), 500 on DB failure, retry-on-collision (succeeds on 2nd try), exhausts after 10 retries
   - [x] Integration: `GET /:code` 301 on hit, 404 on miss, 400 on code too short/long
   - [x] Integration: 429 after exceeding rate limit window
-- [ ] S1-T8: First stress test with `autocannon` — record p50/p95/p99 + error rate at 100 / 500 / 1000 RPS
+- [x] S1-T8: First stress test with `autocannon` — record p50/p95/p99 + error rate at 100 / 500 / 1000 connections
+
+### Postmortem — Stress Test Results (Stage 1, 2026-06-20)
+
+Tested `GET /:code` with autocannon, 30s each level, real Postgres (pool max 10, unchanged from Stage 0).
+
+**Run 1 — rate limiter as configured (`max: 100` / 15 min).** 50 connections, 10s: **0 successful (2xx/3xx) responses out of 136,736 requests** — effectively every request after the first ~100 got `429`. The rate limiter is now *the* bottleneck, by a wide margin, before the DB pool is ever touched.
+
+**Run 2 — rate limiter temporarily raised (`max: 1000000`) to find the underlying ceiling**, same code path as Stage 0:
+
+| Connections | Avg Req/s | p50    | p99    | Max    | Status codes |
+| ----------- | --------- | ------ | ------ | ------ | ------------- |
+| 100c        | 6,325     | 14ms   | 29ms   | 468ms  | 100% `301`    |
+| 500c        | 6,520     | 73ms   | 153ms  | 440ms  | 100% `301`    |
+| 1000c       | 6,206     | 152ms  | 351ms  | 649ms  | 100% `301`    |
+
+Limiter restored to `max: 100` immediately after — no lasting change to `rateLimiter.js`.
+
+**Findings:**
+- Throughput improved over Stage 0 (~4–4.6K → ~6.2–6.5K req/s) — the `idx_short_code` index plus pool reuse is paying off, even though pool size (10) is unchanged. Plateau still confirms the DB round-trip is the real ceiling once the limiter is out of the way.
+- p50 latency scales roughly linearly with concurrency (14ms → 73ms → 152ms) while req/s stays flat — classic queuing-for-a-pool-slot behavior, same root cause as Stage 0, not yet fixed (query timeouts are a Stage 5 task).
+- **The rate limiter being the dominant bottleneck at realistic load is itself the headline result for Stage 1**, not a footnote. It proves the limiter works (good), but also that "100 req/15min, global, single process" is a toy value — any real single-user benchmark or legitimate burst of traffic looks identical to an attack to this limiter. Per-IP limiting and a more realistic ceiling are implicit Stage 4 work (when the limiter must move to Redis anyway for horizontal scale).
 
 ### Interview Concepts (Stage 1)
 
