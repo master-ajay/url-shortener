@@ -1,6 +1,7 @@
 const app = require("./app.js");
 const { PORT } = require("./config/env");
 const db = require("./config/db.js");
+const logger = require("./lib/logger");
 
 db.query("SELECT 1")
   .then(() => {
@@ -12,7 +13,7 @@ db.query("SELECT 1")
   });
 
 const server = app.listen(PORT, () => {
-  console.log(`Server started on ${PORT}`);
+  logger.info(`Server started on ${PORT}`);
 });
 
 const gracefulshutdown = (signal) => {

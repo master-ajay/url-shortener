@@ -6,17 +6,22 @@ const limiter = require("./middleware/rateLimiter");
 const errorHandler = require("./middleware/errorHandler");
 const httpLogger = require("./middleware/httpLogger");
 const requestId = require("./middleware/requestId");
-const helmet = require("helmet")
+const helmet = require("helmet");
+const requestContext = require("./config/asyncContext");
 
 const app = express();
 
 // Trust proxy in production (if behind nginx/render/heroku/etc.)
 // app.set("trust proxy", 1);
 
-app.use(helmet())
+app.use(helmet());
 
 // Request ID middleware
 app.use(requestId);
+
+app.use((req, res, next) => {
+  requestContext.run({ reqId: req.id }, () => next());
+});
 
 // Logger middleware
 app.use(httpLogger);

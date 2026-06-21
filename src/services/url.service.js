@@ -2,8 +2,11 @@ const db = require("../config/db");
 const base62 = require("../utils/base62");
 const isValidUrl = require("../utils/isValidUrl");
 const ApiError = require("../utils/ApiError");
+const getContextLogger = require("../utils/contextLogger");
 
 async function createShortUrl(url, retriedTimes = 0) {
+  const log = getContextLogger();
+  log.info({ url: url.substring(0, 50) }, "Creating short URL");
   if (retriedTimes === 10) {
     throw new Error("Failed to insert after 10 retries");
   }
@@ -24,6 +27,10 @@ async function createShortUrl(url, retriedTimes = 0) {
     return code;
   } catch (error) {
     if (error.code === "23505") {
+      log.info(
+        { retriedTimes: retriedTimes + 1 },
+        "Short code collision, retrying",
+      );
       return createShortUrl(url, retriedTimes + 1);
     }
     throw error;
@@ -31,10 +38,18 @@ async function createShortUrl(url, retriedTimes = 0) {
 }
 
 async function getOriginalUrl(code) {
+  const log = getContextLogger();
+  log.info({ code }, "Looking up original URL");
   const result = await db.query(
     "SELECT original_url FROM short_urls WHERE short_code = $1",
     [code],
   );
+
+  if (result.rows[0]) {
+    log.info("URL found");
+  } else {
+    log.debug("URL not found");
+  }
 
   return result.rows[0]?.original_url ?? null;
 }
