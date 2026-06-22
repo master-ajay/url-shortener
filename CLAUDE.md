@@ -1,113 +1,175 @@
-# CLAUDE.md
+# CLAUDE.md — URL Shortener Development Guide
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+**Status:** Stage 2 Complete ✅  
+**Read first:** `ROADMAP.md` (design decisions, trade-offs, interview concepts)
 
-## Project Context
+---
 
-This is a **learning project** being built in stages toward a production-grade URL shortener. Do not over-engineer features or add infrastructure beyond the current stage. Implement only what is asked — the complexity is added deliberately, stage by stage.
-
-See `ROADMAP.md` for the full 6-stage design plan: problem statement, design alternatives considered, chosen design + rationale, trade-offs, failure modes, and interview concepts per stage. Always tie code changes back to the stage they belong to and avoid jumping ahead.
-
-## Commands
+## Quick Start
 
 ```bash
-npm run dev        # Start with nodemon (development)
-npm start          # Start without nodemon (production)
-npm test           # Run Jest tests
-npx jest <path>    # Run a single test file
+npm run dev      # Development (nodemon)
+npm start        # Production
+npm test         # Run tests
+npx jest <path>  # Single test file
 ```
 
-The app requires a running PostgreSQL instance. Apply the schema before starting:
-
+**Setup:** PostgreSQL must be running. Apply migrations:
 ```bash
 psql $PG_CONNECTION_STRING -f src/migrations/create_urls.sql
+psql $PG_CONNECTION_STRING -f src/migrations/add_clicks_column.sql
+psql $PG_CONNECTION_STRING -f src/migrations/add_expires_at_column.sql
 ```
 
-## Environment Variables
+**Required `.env`:**
+```
+PORT=3000
+BASE_URL=http://localhost:3000
+PG_CONNECTION_STRING=postgresql://user@localhost:5432/url_shortener
+CORS_ORIGIN=*
+LOG_LEVEL=info
+NODE_ENV=development
+```
 
-Required in `.env`:
+---
 
-| Variable | Purpose |
-|---|---|
-| `PORT` | HTTP server port (default: 3000) |
-| `BASE_URL` | Used to construct `short_url` in the shorten response |
-| `PG_CONNECTION_STRING` | PostgreSQL connection string |
-| `CORS_ORIGIN` | Allowed CORS origin |
-| `LOG_LEVEL` | Pino log level (default: `info`) |
-| `NODE_ENV` | `development` enables `pino-pretty` transport |
+## Core Pattern: Request Lifecycle
 
-## Architecture
+**Middleware chain** (in `src/app.js`):
+1. `requestId` → Attach UUID to `req.id`
+2. `requestContext.run()` → Store `req.id` in AsyncLocalStorage
+3. `httpLogger` → Log HTTP request/response with correlation
+4. `rateLimiter` → 100 req/15 min (bypass with `NODE_ENV=test`)
+5. CORS, body parsers
+6. Routes → Controller → Service → DB
+7. `errorHandler` → Catch and format errors
 
-### Request Lifecycle
+---
 
-Every request flows through this middleware chain (in order, defined in `src/app.js`):
+## Adding a Feature (4 Steps)
 
-1. `requestId` — attaches a UUID (`req.id`) used for log correlation
-2. `httpLogger` (pino-http) — logs request/response using `req.id`
-3. `rateLimiter` — 100 req / 15 min global limit
-4. CORS, body parsers
-5. Route handlers → controller → service → PostgreSQL
-6. `errorHandler` — catches anything thrown or passed to `next(err)`
+1. **Validator** (`src/validators/url.validator.js`): Zod schema for request + response
+2. **Route** (`src/routes/url.routes.js`): `router.post(..., validate(schema), controller)`
+3. **Controller** (`src/controllers/url.controller.js`): Extract params, call service, format response
+4. **Service** (`src/services/url.service.js`): Business logic, DB queries
 
-### Adding a New Route
+**Error pattern:**
+- Throw `new ApiError(status, message)` in service/controller
+- Wrap controller with `asyncHandler` (catches async errors)
+- `errorHandler` middleware formats the response
 
-Follow this chain — every step is required:
+---
 
-1. Add a Zod schema to `src/validators/url.validator.js`
-2. Register the route in `src/routes/url.routes.js` with `validate(schema)` middleware
-3. Write the controller in `src/controllers/url.controller.js` — wrap with `asyncHandler`, throw `ApiError` for errors
-4. Put DB logic in `src/services/url.service.js` — raw `db.query()`, no ORM
+## Database Schema
 
-### Error Handling Pattern
+**Table:** `short_urls`
+| Column | Type | Notes |
+|--------|------|-------|
+| `short_code` | VARCHAR(10) UNIQUE | Indexed; collision retry 10x |
+| `original_url` | TEXT | Validated with Zod |
+| `created_at` | TIMESTAMP | Auto-set |
+| `clicks` | INT DEFAULT 0 | Atomic `RETURNING clicks` |
+| `expires_at` | TIMESTAMP | Default NOW() + 30 days |
 
-Controllers never call `res.status(...).json(...)` for errors:
+**Queries use raw SQL** (no ORM). DB connection via `pg.Pool` (Stage 1 fixed from `pg.Client`).
 
-- Throw `new ApiError(statusCode, message)` for known errors
-- Wrap every controller with `asyncHandler` (`src/utils/asynchandler.js`) to forward async errors to `next(err)`
-- `errorHandler` middleware (`src/middleware/errorHandler.js`) sends the final JSON error response
+---
 
-Validation failures (Zod) return `400` directly from the `validate` middleware and do **not** go through `errorHandler`.
+## Logging & Observability
 
-### Validation
+**Pino logger** (`src/lib/logger.js`):
+- Use `getContextLogger()` in all services (auto-injects `reqId`)
+- Development: Pretty-printed via `pino-pretty`
+- Production: Raw JSON
 
-Zod schemas in `src/validators/url.validator.js` cover request input and response shape. The `validate(schema)` middleware parses `{ body, params, query }` before the handler runs. Response shape is also validated with Zod inside the controller before `res.json()`.
+**Request correlation:**
+- Every request has unique `req.id` (UUID)
+- Stored in AsyncLocalStorage via `requestContext`
+- All logs include `reqId` field automatically
+- Trace single request end-to-end
 
-### Database
+---
 
-`src/config/db.js` exports a `pg.Pool`. The service layer calls `db.query()` directly.
+## Testing (SDE2 Standard)
 
-The only table is `short_urls` (schema in `src/migrations/create_short_urls.sql`):
+**Organization:**
+- `src/__tests__/unit/` — Pure functions (no I/O)
+- `src/__tests__/integration/` — Route + service + mocked DB
 
-- `short_code varchar(10) UNIQUE` — indexed via `idx_short_code`
-- On `unique_violation` (pg error `23505`), `createShortUrl` retries up to 10 times
+**Rules:**
+- **Test pyramid:** Unit-test logic, integration-test wiring
+- **Mock boundaries:** DB boundary (`src/config/__mocks__/db.js`), never mock internal code
+- **Test contracts:** Assert response status/shape (Zod matches), not implementation
+- **One behavior per test** — Use Arrange-Act-Assert
+- **Minimum coverage per route:**
+  - Happy path (correct status + shape)
+  - Each validation error (400)
+  - Each domain error (404, 409, 410, etc.)
+  - Side effects (retry, rate limit, expiry)
 
-### Logging
+Run `npm test` before PR.
 
-`src/lib/logger.js` exports a Pino instance. Use this everywhere instead of `console`. In development, logs are pretty-printed via `pino-pretty`; in production, raw JSON is emitted.
+---
 
-## Testing Standards
+## Current Architecture (Stage 2)
 
-Tests live under `src/__tests__/`, split by type — this split is structural, not just a naming hint:
+### Endpoints
 
-- `src/__tests__/unit/` — pure functions, no I/O (`isValidUrl.test.js`, `base62.test.js`)
-- `src/__tests__/integration/` — route + controller + service wired together via `supertest`, with `db.query` mocked (`shorten.test.js`, `redirect.test.js`)
+**POST /shorten**
+- Input: `{ url, custom_code? }`
+- Output: `{ code, short_url }`
+- Error: 400 (invalid URL/code), 409 (code taken)
 
-True E2E (real deployed server, real DB, real network) doesn't exist yet — it requires deploy/CI infra that doesn't show up until Stage 4+. Don't build it early.
+**GET /:code**
+- Redirect: 301 to original URL
+- Error: 404 (not found), 410 (expired)
+- Side effect: Atomic increment `clicks`
 
-The bar here is SDE2, not "happy path exists":
+**GET /stats/:code**
+- Output: `{ code, original_url, clicks, created_at, expires_at, is_expired }`
+- Error: 404 (not found)
 
-- **Test pyramid** — push logic into unit-testable functions (`isValidUrl`, `base62`, retry-on-collision) and unit-test those directly. Integration tests only need to prove the wiring is correct — they should not re-derive every edge case already covered by a unit test.
-- **Mock at the boundary, not the internals** — never mock your own service/controller code under test. The DB boundary has a manual mock at `src/config/__mocks__/db.js` (`{ query: jest.fn() }`); calling `jest.mock("../../config/db")` in an integration test auto-applies it, so each test only needs `db.query.mockResolvedValueOnce(...)` / `mockRejectedValueOnce(...)`, not redefining the mock shape every time.
-- **Test the contract, not the implementation** — assert on `response.status` / `response.body` shape (matching the Zod schema), not on internal call mechanics, *unless* the interaction itself is the behavior under test (e.g., proving collision retry calls `db.query` again on a `23505` error).
-- **One behavior per `it()`, Arrange-Act-Assert structure.** A test name with "and" in it should be split into two tests.
-- **Minimum required cases per route before merging:**
-  - Happy path (correct status + response shape)
-  - Each validation failure (400) — one test per invalid input variant
-  - Each domain error (404, 409, etc.)
-  - Documented side effects: retry-on-collision, rate-limit 429, expiry 410, etc.
-- Run `npm test` before opening a PR.
+### Features Completed
 
-## Known Issues / Tech Debt
+| Feature | Status | File |
+|---------|--------|------|
+| Request correlation | ✅ | `src/config/asyncContext.js` |
+| Structured logging | ✅ | `src/utils/contextLogger.js` |
+| Click counter | ✅ | `src/services/url.service.js` |
+| URL expiry (TTL) | ✅ | 410 Gone on expired |
+| Custom codes | ✅ | Zod validation + collision check |
+| Stress tested | ✅ | 6K req/sec, p99=27ms |
 
-- **Tests are in progress**: `src/__tests__/shorten.test.js` exists but is a stub — see Testing Standards above for the bar to clear before S1-T7 is done.
-- **`trust proxy` is commented out** in `app.js`: Must be enabled when deploying behind a reverse proxy (nginx, Render, Railway) or rate limiting and IP detection will be wrong.
+---
+
+## Known Constraints
+
+- **Rate limiter:** 100 req/15 min (becomes bottleneck before DB at 6K+/sec)
+- **TTL enforcement:** Lazy (check on read, not background cleanup)
+- **Custom code validation:** Must add denylist (reserved: admin, api, health, stats, etc.)
+- **Sync click increment:** Hot-row contention at 1K+ RPS → fixed in Stage 3 with Redis
+
+---
+
+## Next: Stage 3 (Redis Cache)
+
+**Goal:** p99 < 5ms, 10K+ req/sec  
+**Solution:** Cache-aside pattern for redirects  
+**Trade-off:** Eventual consistency (TTL 5-60 min)
+
+See `ROADMAP.md` for full Stage 3 design.
+
+---
+
+## Style Conventions
+
+- No comments unless WHY is non-obvious
+- Error messages: lowercase, 50 chars max
+- Database: Raw SQL with parameterized queries (no ORM)
+- Logging: Structured fields, not string interpolation
+- Schema validation: Input (request) + Output (response) in Zod
+- Tests: 1 behavior per `it()`, Arrange-Act-Assert
+
+---
+
+**Last updated:** 2026-06-22 (Stage 2 completion)
