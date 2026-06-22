@@ -14,9 +14,15 @@ const redirectSchema = z.object({
   }),
 });
 
-// Response Validation
+// Params Validation
+const statsSchema = z.object({
+  params: z.object({
+    code: z.string().min(3, "Code too short").max(20, "Code too long"),
+  }),
+});
+
+// Response Validation (success is added by ApiResponse, don't include here)
 const shortenResponseSchema = z.object({
-  success: z.boolean(),
   code: z.string(),
   short_url: z.string().url(),
 });
@@ -24,5 +30,6 @@ const shortenResponseSchema = z.object({
 module.exports = {
   shortenUrlSchema,
   redirectSchema,
+  statsSchema,
   shortenResponseSchema,
 };

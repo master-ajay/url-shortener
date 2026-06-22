@@ -46,6 +46,14 @@ async function getOriginalUrl(code) {
   );
 
   if (result.rows[0]) {
+    const updateResult = await db.query(
+      "UPDATE short_urls SET clicks = clicks + 1 WHERE short_code = $1 RETURNING clicks",
+      [code],
+    );
+
+    const newClicks = updateResult.rows[0].clicks;
+
+    log.info({ code, clicks: newClicks }, "Incremented click counter");
     log.info("URL found");
   } else {
     log.debug("URL not found");
@@ -54,4 +62,22 @@ async function getOriginalUrl(code) {
   return result.rows[0]?.original_url ?? null;
 }
 
-module.exports = { createShortUrl, getOriginalUrl };
+async function getUrlStats(code) {
+  const log = getContextLogger();
+  log.info({ code }, "Fetching URL stats");
+
+  const result = await db.query(
+    "SELECT short_code, original_url, clicks, created_at FROM short_urls WHERE short_code = $1",
+    [code],
+  );
+
+  if (result.rows[0]) {
+    log.info({ code, clicks: result.rows[0].clicks }, "Stats found");
+    return result.rows[0];
+  } else {
+    log.debug("URL not found");
+    return null;
+  }
+}
+
+module.exports = { createShortUrl, getOriginalUrl, getUrlStats };

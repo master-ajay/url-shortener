@@ -116,6 +116,55 @@
       "response": []
     },
     {
+      "name": "Get URL Stats",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function() {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Response has stats data', function() {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData.data).to.have.property('code');",
+              "    pm.expect(jsonData.data).to.have.property('original_url');",
+              "    pm.expect(jsonData.data).to.have.property('clicks');",
+              "    pm.expect(jsonData.data).to.have.property('created_at');",
+              "});",
+              "",
+              "pm.test('Clicks is a number', function() {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData.data.clicks).to.be.a('number');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/stats/{{short_code}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "stats",
+            "{{short_code}}"
+          ]
+        },
+        "description": "Get analytics for a shortened URL (code, clicks, created_at)"
+      },
+      "response": []
+    },
+    {
       "name": "Health Check",
       "request": {
         "method": "GET",

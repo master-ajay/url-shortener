@@ -1,5 +1,9 @@
 const { BASE_URL } = require("../config/env");
-const { createShortUrl, getOriginalUrl } = require("../services/url.service");
+const {
+  createShortUrl,
+  getOriginalUrl,
+  getUrlStats,
+} = require("../services/url.service");
 const asyncHandler = require("../utils/asynchandler");
 const ApiError = require("../utils/ApiError");
 const ApiResponse = require("../utils/ApiResponse");
@@ -14,14 +18,11 @@ const shorten = asyncHandler(async (req, res) => {
   const responseData = {
     code,
     short_url: `${BASE_URL}/${code}`,
-    success: true,
   };
 
   shortenResponseSchema.parse(responseData);
 
-  const response = new ApiResponse(201, {
-    ...responseData,
-  });
+  const response = new ApiResponse(201, responseData);
 
   res.status(response.statusCode).json(response);
 });
@@ -38,4 +39,24 @@ const redirect = asyncHandler(async (req, res) => {
   return res.redirect(301, original_url);
 });
 
-module.exports = { shorten, redirect };
+const getStats = asyncHandler(async (req, res) => {
+  const { code } = req.params;
+
+  const stats = await getUrlStats(code);
+
+  if (!stats) {
+    throw new ApiError(404, "URL not found");
+  }
+
+  const responseData = {
+    code: stats.short_code,
+    original_url: stats.original_url,
+    clicks: stats.clicks,
+    created_at: stats.created_at,
+  };
+
+  const response = new ApiResponse(200, responseData);
+  res.status(response.statusCode).json(response);
+});
+
+module.exports = { shorten, redirect, getStats };
