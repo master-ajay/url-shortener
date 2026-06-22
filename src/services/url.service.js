@@ -4,7 +4,7 @@ const isValidUrl = require("../utils/isValidUrl");
 const ApiError = require("../utils/ApiError");
 const getContextLogger = require("../utils/contextLogger");
 
-async function createShortUrl(url, retriedTimes = 0) {
+async function createShortUrl(url, custom_code = "", retriedTimes = 0) {
   const log = getContextLogger();
   log.info({ url: url.substring(0, 50) }, "Creating short URL");
   if (retriedTimes === 10) {
@@ -15,6 +15,22 @@ async function createShortUrl(url, retriedTimes = 0) {
 
   if (!isUrlValid) {
     throw new ApiError(400, "Invalid URL");
+  }
+
+  if (custom_code.length >= 3) {
+    try {
+      await db.query(
+        "INSERT INTO short_urls (short_code,original_url) VALUES ($1,$2)",
+        [custom_code, url],
+      );
+
+      return custom_code
+    } catch (err) {
+      if (err.code === "23505") {
+        throw new ApiError(409, "Custom code already taken");
+      }
+      throw err;
+    }
   }
 
   const code = base62(Math.floor(Math.random() * 1000000000));

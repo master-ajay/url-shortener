@@ -165,6 +165,207 @@
       "response": []
     },
     {
+      "name": "Shorten URL with Custom Code",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 201', function() {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test('Response has custom code', function() {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData.data.code).to.equal('mycustomcode');",
+              "});",
+              "",
+              "pm.test('Short URL contains custom code', function() {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData.data.short_url).to.include('mycustomcode');",
+              "});",
+              "",
+              "// Save custom code for collision test",
+              "const jsonData = pm.response.json();",
+              "pm.environment.set('custom_code', jsonData.data.code);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"url\": \"https://www.google.com\", \"custom_code\": \"mycustomcode\"}"
+        },
+        "url": {
+          "raw": "{{base_url}}/shorten",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "shorten"
+          ]
+        },
+        "description": "Create a shortened URL with custom code"
+      },
+      "response": []
+    },
+    {
+      "name": "Custom Code Collision (409)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 409 Conflict', function() {",
+              "    pm.response.to.have.status(409);",
+              "});",
+              "",
+              "pm.test('Error message mentions code already taken', function() {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData.message).to.include('already taken');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"url\": \"https://www.example.com\", \"custom_code\": \"mycustomcode\"}"
+        },
+        "url": {
+          "raw": "{{base_url}}/shorten",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "shorten"
+          ]
+        },
+        "description": "Attempt to use custom code that already exists - should return 409"
+      },
+      "response": []
+    },
+    {
+      "name": "Invalid Custom Code - Too Short (400)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 400 Bad Request', function() {",
+              "    pm.response.to.have.status(400);",
+              "});",
+              "",
+              "pm.test('Error message mentions code too short', function() {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData.message).to.include('atleast 3 characters');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"url\": \"https://www.example.com\", \"custom_code\": \"ab\"}"
+        },
+        "url": {
+          "raw": "{{base_url}}/shorten",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "shorten"
+          ]
+        },
+        "description": "Invalid custom code (too short) - should return 400"
+      },
+      "response": []
+    },
+    {
+      "name": "Invalid Custom Code - Special Characters (400)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 400 Bad Request', function() {",
+              "    pm.response.to.have.status(400);",
+              "});",
+              "",
+              "pm.test('Error message mentions invalid format', function() {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData.message).to.include('only');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"url\": \"https://www.example.com\", \"custom_code\": \"my-code!\"}"
+        },
+        "url": {
+          "raw": "{{base_url}}/shorten",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "shorten"
+          ]
+        },
+        "description": "Invalid custom code (special characters) - should return 400"
+      },
+      "response": []
+    },
+    {
       "name": "Health Check",
       "request": {
         "method": "GET",

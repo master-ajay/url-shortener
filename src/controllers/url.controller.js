@@ -11,9 +11,9 @@ const ApiResponse = require("../utils/ApiResponse");
 const { shortenResponseSchema } = require("../validators/url.validator");
 
 const shorten = asyncHandler(async (req, res) => {
-  const { url } = req.body;
+  const { url, custom_code } = req.body;
 
-  const code = await createShortUrl(url);
+  const code = await createShortUrl(url, custom_code);
 
   const responseData = {
     code,

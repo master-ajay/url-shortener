@@ -4,6 +4,12 @@ const { z } = require("zod");
 const shortenUrlSchema = z.object({
   body: z.object({
     url: z.string().min(1, "URL is required").url("Invalid URL format"),
+    custom_code: z
+      .string()
+      .min(3, "Code must have atleast 3 characters")
+      .max(20, "Code must have max 20 characters")
+      .regex(/^[a-zA-Z0-9]*$/, "Code must contain only lowercase letters and numbers")
+      .optional(),
   }),
 });
 
