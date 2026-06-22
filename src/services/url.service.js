@@ -41,11 +41,19 @@ async function getOriginalUrl(code) {
   const log = getContextLogger();
   log.info({ code }, "Looking up original URL");
   const result = await db.query(
-    "SELECT original_url FROM short_urls WHERE short_code = $1",
+    "SELECT original_url,expires_at FROM short_urls WHERE short_code = $1",
     [code],
   );
 
-  if (result.rows[0]) {
+  const url = result.rows[0];
+
+  if (url) {
+    const isExpired = new Date(url.expires_at) < new Date();
+    if (isExpired) {
+      log.info({ code, expires_at: url.expires_at }, "URL has expired");
+      throw new ApiError(410, "URL has expired");
+    }
+
     const updateResult = await db.query(
       "UPDATE short_urls SET clicks = clicks + 1 WHERE short_code = $1 RETURNING clicks",
       [code],
@@ -59,7 +67,7 @@ async function getOriginalUrl(code) {
     log.debug("URL not found");
   }
 
-  return result.rows[0]?.original_url ?? null;
+  return url?.original_url ?? null;
 }
 
 async function getUrlStats(code) {
@@ -67,13 +75,19 @@ async function getUrlStats(code) {
   log.info({ code }, "Fetching URL stats");
 
   const result = await db.query(
-    "SELECT short_code, original_url, clicks, created_at FROM short_urls WHERE short_code = $1",
+    "SELECT short_code, original_url, clicks, created_at, expires_at FROM short_urls WHERE short_code = $1",
     [code],
   );
 
-  if (result.rows[0]) {
-    log.info({ code, clicks: result.rows[0].clicks }, "Stats found");
-    return result.rows[0];
+  const url = result.rows[0];
+
+  if (url) {
+    log.info(
+      { code, clicks: url.clicks, expires_at: url.expires_at },
+      "Stats found",
+    );
+    const isExpired = new Date(url.expires_at) < new Date();
+    return { ...url, is_expired: isExpired };
   } else {
     log.debug("URL not found");
     return null;

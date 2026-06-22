@@ -53,6 +53,8 @@ const getStats = asyncHandler(async (req, res) => {
     original_url: stats.original_url,
     clicks: stats.clicks,
     created_at: stats.created_at,
+    is_expired: stats.is_expired,
+    expires_at: stats.expires_at,
   };
 
   const response = new ApiResponse(200, responseData);
