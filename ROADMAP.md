@@ -272,7 +272,7 @@ This stage adds eyes and ears, plus the first product features (TTL, custom code
 
 **UUIDv4 for request IDs.** Already using it. ULIDs would be marginally better (sortable, time-prefixed), but UUIDv4 is fine until you need to range-scan request IDs in a log store. Defer.
 
-**Sync `UPDATE` for click counter (Stage 2 only).** Simple, correct, slow. At 1K RPS this becomes hot-row contention — every redirect locks the same counter row. We accept this for *one* stage so you can *measure* the contention; Stage 3 introduces Redis-backed counters, Stage 6 introduces a queue.
+**Sync `UPDATE` for click counter (Stage 2–3).** Simple, correct, slow. At 1K RPS this becomes hot-row contention — every redirect locks the same counter row. Stage 3 caches the SELECT (URL lookup) but the UPDATE still hits DB on every redirect. Redis INCR + batch flush to DB deferred to Stage 6 — it requires a background worker and adds eventual consistency to click counts, which is Stage 6 scope.
 
 **Lazy TTL check.** Add `expires_at TIMESTAMP` column. On read, check `now() < expires_at`. Pros: no background job. Cons: expired rows accumulate forever — needs a periodic cleanup job added at Stage 5 when row counts hurt.
 
@@ -280,7 +280,7 @@ This stage adds eyes and ears, plus the first product features (TTL, custom code
 
 ### Trade-offs Accepted
 
-- Click counter has hot-row contention → known, fixed at Stage 3
+- Click counter has hot-row contention → SELECT now cached (Stage 3), UPDATE still hits DB → fully fixed at Stage 6 (Redis INCR + batch flush)
 - No real metrics dashboard yet → add Prometheus exporter here, Grafana later
 - Custom codes need their own collision handling AND a denylist (reserved words like `admin`, `api`, `health`) — easy to forget
 
@@ -373,11 +373,11 @@ Cache-aside is the canonical choice for read-heavy workloads. Cost: a race on wr
 
 ### Tasks (Stage 3)
 
-- [ ] S3-T1: Add Redis (docker-compose) or Upstash free tier
-- [ ] S3-T2: `src/lib/cache.js` — `get`, `set(ttl)`, `del`, `wrap(key, ttl, fn)` with single-flight via in-process `Map` of pending promises
-- [ ] S3-T3: Wrap `getShortUrl` service with `cache.wrap`
-- [ ] S3-T4: On `createShortUrl`, populate cache (write-around vs write-through — pick and document)
-- [ ] S3-T5: TTL jitter — `BASE_TTL + random(0, JITTER_TTL)`
+- [x] S3-T1: Add Redis — local `redis` npm client, `REDIS_URL` env var, connect on startup in `server.js`
+- [x] S3-T2: `src/lib/cache.js` — `get`, `set(ttl)`, `del`, `wrap(key, ttl, fn)` with single-flight via in-process `Map` of pending promises. All Redis calls wrapped in try/catch — Redis down degrades gracefully to DB.
+- [x] S3-T3: Wrap `getOriginalUrl` with `cache.wrap` — SELECT never hits DB on cache hit. Cache key: `url:<code>`, stores `{ original_url, expires_at }`. Invalidated on 410.
+- [x] S3-T4: On `createShortUrl`, pre-warm cache via `INSERT ... RETURNING original_url, expires_at` (write-around — single RETURNING query, no extra SELECT). Chosen over write-through: writes are rare, no benefit coupling write latency to cache.
+- [ ] S3-T5: ~~TTL jitter~~ — **moved to S4-T2** (single process, thundering herd risk is low; becomes critical at Stage 4 when N nodes share the same Redis cache and amplify expiry stampedes)
 - [ ] S3-T6: Stress test, target 10K RPS, document cache hit rate + p99
 - [ ] S3-T7: Chaos test — kill Redis mid-stress, confirm graceful degradation to DB
 
@@ -437,11 +437,12 @@ We need N processes serving traffic, fronted by a load balancer. This is the mom
 ### Tasks (Stage 4)
 
 - [ ] S4-T1: Audit codebase for in-process state; move rate limiter to Redis (`rate-limit-redis`)
-- [ ] S4-T2: Graceful shutdown — `server.close()`, drain pool, exit on SIGTERM
-- [ ] S4-T3: PM2 ecosystem file, cluster mode with `instances: max`
-- [ ] S4-T4: Nginx config with upstream pool + health checks
-- [ ] S4-T5: `/health` and `/ready` endpoints (liveness vs readiness)
-- [ ] S4-T6: Stress test with 4 instances; target 50K RPS; verify even load distribution
+- [ ] S4-T2: TTL jitter — `BASE_TTL + Math.floor(Math.random() * JITTER)` in `cache.js`. With N nodes sharing Redis, mass expiry = N× the stampede; jitter spreads it across a window.
+- [ ] S4-T3: Graceful shutdown — `server.close()`, drain pool, exit on SIGTERM
+- [ ] S4-T4: PM2 ecosystem file, cluster mode with `instances: max`
+- [ ] S4-T5: Nginx config with upstream pool + health checks
+- [ ] S4-T6: `/health` and `/ready` endpoints (liveness vs readiness)
+- [ ] S4-T7: Stress test with 4 instances; target 50K RPS; verify even load distribution
 
 ### Interview Concepts (Stage 4)
 

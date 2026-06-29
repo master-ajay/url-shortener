@@ -1,6 +1,6 @@
 # CLAUDE.md — URL Shortener Development Guide
 
-**Status:** Stage 2 Complete ✅  
+**Status:** Stage 3 In Progress 🔄  
 **Read first:** `ROADMAP.md` (design decisions, trade-offs, interview concepts)
 
 ---
@@ -26,6 +26,7 @@ psql $PG_CONNECTION_STRING -f src/migrations/add_expires_at_column.sql
 PORT=3000
 BASE_URL=http://localhost:3000
 PG_CONNECTION_STRING=postgresql://user@localhost:5432/url_shortener
+REDIS_URL=redis://localhost:6379
 CORS_ORIGIN=*
 LOG_LEVEL=info
 NODE_ENV=development
@@ -111,7 +112,7 @@ Run `npm test` before PR.
 
 ---
 
-## Current Architecture (Stage 2)
+## Current Architecture (Stage 3)
 
 ### Endpoints
 
@@ -119,15 +120,18 @@ Run `npm test` before PR.
 - Input: `{ url, custom_code? }`
 - Output: `{ code, short_url }`
 - Error: 400 (invalid URL/code), 409 (code taken)
+- Side effect: Pre-warms Redis cache with `{ original_url, expires_at }` via `RETURNING`
 
 **GET /:code**
 - Redirect: 301 to original URL
 - Error: 404 (not found), 410 (expired)
-- Side effect: Atomic increment `clicks`
+- Side effect: Atomic increment `clicks` (DB); URL lookup served from Redis on cache hit
+- Cache invalidation: `cache.del` on 410 to remove stale entry
 
 **GET /stats/:code**
 - Output: `{ code, original_url, clicks, created_at, expires_at, is_expired }`
 - Error: 404 (not found)
+- Not cached — must show real-time click counts
 
 ### Features Completed
 
@@ -138,7 +142,11 @@ Run `npm test` before PR.
 | Click counter | ✅ | `src/services/url.service.js` |
 | URL expiry (TTL) | ✅ | 410 Gone on expired |
 | Custom codes | ✅ | Zod validation + collision check |
-| Stress tested | ✅ | 6K req/sec, p99=27ms |
+| Stress tested (Stage 2) | ✅ | 6K req/sec, p99=27ms |
+| Redis client | ✅ | `src/config/redis.js` |
+| Cache module | ✅ | `src/lib/cache.js` — get/set/del/wrap + single-flight |
+| Cache-aside on redirect | ✅ | `getOriginalUrl` wrapped with `cache.wrap` |
+| Cache pre-warm on create | ✅ | `createShortUrl` populates Redis via `RETURNING` |
 
 ---
 
@@ -147,15 +155,15 @@ Run `npm test` before PR.
 - **Rate limiter:** 100 req/15 min (becomes bottleneck before DB at 6K+/sec)
 - **TTL enforcement:** Lazy (check on read, not background cleanup)
 - **Custom code validation:** Must add denylist (reserved: admin, api, health, stats, etc.)
-- **Sync click increment:** Hot-row contention at 1K+ RPS → fixed in Stage 3 with Redis
+- **Sync click increment:** Hot-row contention at 1K+ RPS — SELECT is now cached but UPDATE still hits DB on every redirect. Deferred to Stage 6 (Redis INCR + batch flush to DB).
+- **Cache TTL:** Fixed 300s — no jitter (thundering herd risk is low at single process; moved to S4-T2 where N nodes amplify the stampede)
 
 ---
 
-## Next: Stage 3 (Redis Cache)
+## Stage 3 Remaining Tasks
 
-**Goal:** p99 < 5ms, 10K+ req/sec  
-**Solution:** Cache-aside pattern for redirects  
-**Trade-off:** Eventual consistency (TTL 5-60 min)
+- [ ] S3-T6: Stress test — target 10K+ req/sec, document cache hit rate + p99
+- [ ] S3-T7: Chaos test — kill Redis mid-stress, confirm graceful degradation to DB
 
 See `ROADMAP.md` for full Stage 3 design.
 
@@ -172,4 +180,4 @@ See `ROADMAP.md` for full Stage 3 design.
 
 ---
 
-**Last updated:** 2026-06-22 (Stage 2 completion)
+**Last updated:** 2026-06-29 (Stage 3 in progress — cache-aside implemented)
