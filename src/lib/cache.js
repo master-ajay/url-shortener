@@ -11,6 +11,7 @@ function withTimeout(promise, ms) {
     promise,
     new Promise((_, reject) => {
       timer = setTimeout(() => reject(new Error("redis op timeout")), ms);
+      if (typeof timer.unref === "function") timer.unref();
     }),
   ]).finally(() => clearTimeout(timer));
 }
