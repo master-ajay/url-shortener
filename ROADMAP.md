@@ -371,15 +371,46 @@ Cache-aside is the canonical choice for read-heavy workloads. Cost: a race on wr
 4. **Memory pressure / eviction** — Redis OOM → starts evicting under `allkeys-lru`. Hot keys stay, but you may evict valuable warm keys. Monitor `evicted_keys`.
 5. **Network partition app↔Redis** — call with no timeout → request stalls. Always set `socketTimeout` < request timeout.
 
-### Tasks (Stage 3)
+### Tasks (Stage 3) — ✅ COMPLETED 2026-07-17
 
 - [x] S3-T1: Add Redis — local `redis` npm client, `REDIS_URL` env var, connect on startup in `server.js`
 - [x] S3-T2: `src/lib/cache.js` — `get`, `set(ttl)`, `del`, `wrap(key, ttl, fn)` with single-flight via in-process `Map` of pending promises. All Redis calls wrapped in try/catch — Redis down degrades gracefully to DB.
 - [x] S3-T3: Wrap `getOriginalUrl` with `cache.wrap` — SELECT never hits DB on cache hit. Cache key: `url:<code>`, stores `{ original_url, expires_at }`. Invalidated on 410.
 - [x] S3-T4: On `createShortUrl`, pre-warm cache via `INSERT ... RETURNING original_url, expires_at` (write-around — single RETURNING query, no extra SELECT). Chosen over write-through: writes are rare, no benefit coupling write latency to cache.
-- [ ] S3-T5: ~~TTL jitter~~ — **moved to S4-T2** (single process, thundering herd risk is low; becomes critical at Stage 4 when N nodes share the same Redis cache and amplify expiry stampedes)
-- [ ] S3-T6: Stress test, target 10K RPS, document cache hit rate + p99
-- [ ] S3-T7: Chaos test — kill Redis mid-stress, confirm graceful degradation to DB
+- [x] S3-T5: ~~TTL jitter~~ — **moved to S4-T2** (single process, thundering herd risk is low; becomes critical at Stage 4 when N nodes share the same Redis cache and amplify expiry stampedes)
+- [x] S3-T6: Stress test, target 10K RPS, document cache hit rate + p99 — **see results below**
+- [x] S3-T7: Chaos test — kill Redis mid-stress, confirm graceful degradation to DB — **see results below**
+
+### Stage 3 Stress Test Results (2026-07-17)
+
+**Setup:** `NODE_ENV=test` (rate limiter off), `LOG_LEVEL=error`, warm key `stresstest`, Redis INFO `keyspace_hits/misses` for hit rate. Autocannon, 10s, no pipelining (matches Stage 2 methodology).
+
+| Endpoint | Conns | p50 | p99 | Throughput | Cache hit rate |
+|----------|-------|-----|-----|------------|----------------|
+| `/health` (no I/O) | 50c | 2ms | 7ms | **15.9K req/sec** | n/a |
+| `/:code` (cached + click UPDATE) | 50c | 10ms | 32ms | **4.4K req/sec** | **100%** (48.4K hits / 0 misses) |
+| `/:code` | 100c | 16ms | 45ms | **5.4K req/sec** | **100%** (59.8K hits / 0 misses) |
+| `/:code` (pipelined `-p 10`) | 50c | 73ms | 186ms | **6.2K req/sec** | **100%** |
+
+**Did not hit 10K RPS on redirects — and that is the finding.** SELECT is fully cached (100% hit rate), but every redirect still does `UPDATE … clicks = clicks + 1`. Hot-row write contention + pool saturation keep throughput in the same 4–7K band as Stage 2. `/health` at 16K proves the Node process itself is not the limit yet.
+
+**Critical Discovery:** Cache-aside solved the *read* path. The remaining bottleneck is the *sync click counter write* — exactly the Stage 6 problem (Redis INCR + batch flush). Entering Stage 4 (horizontal scale) still makes sense: more Node processes help CPU-bound work and set up shared-Redis concerns (TTL jitter, distributed rate limit), but redirect RPS will not jump an order of magnitude until Stage 6 removes the per-request UPDATE.
+
+**Chaos fix shipped with S3-T7:** With Redis dead, `node-redis` queued commands forever (`disableOfflineQueue` default false) → redirects hung. Fixed in `redis.js` (`disableOfflineQueue: true`, `connectTimeout: 500`) and `cache.js` (`isReady` short-circuit + 200ms op timeout).
+
+### Stage 3 Chaos Test Results (2026-07-17)
+
+**Method:** autocannon 50c / 15s on `GET /stresstest`; `SIGKILL` Redis at t=5s; spot-check redirects during outage.
+
+| Metric | Result |
+|--------|--------|
+| Client errors / timeouts | **0 / 0** |
+| Status codes | **100% 301** (104,039) |
+| Avg RPS across outage | 6.9K |
+| p50 / p99 | 6ms / 13ms |
+| Spot checks while Redis down | 5/5 → 301 |
+
+**Verdict:** Graceful degradation confirmed — Redis outage does not take down redirects; lookups fall through to Postgres.
 
 ### Interview Concepts (Stage 3)
 

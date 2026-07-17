@@ -1,7 +1,14 @@
 const request = require("supertest");
-const app = require("../../app");
 
 jest.mock("../../config/db");
+jest.mock("../../lib/cache", () => ({
+  wrap: jest.fn((_key, _ttl, fn) => fn()),
+  set: jest.fn(),
+  get: jest.fn(),
+  del: jest.fn(),
+}));
+
+const app = require("../../app");
 const db = require("../../config/db");
 
 describe("GET /:code", () => {
@@ -10,15 +17,20 @@ describe("GET /:code", () => {
   });
 
   it("should redirect to the original url when code exists", async () => {
-    db.query.mockResolvedValueOnce({
-      rows: [{ original_url: "https://example.com" }],
-    });
+    const future = new Date(Date.now() + 86400000).toISOString();
+    db.query
+      .mockResolvedValueOnce({
+        rows: [{ original_url: "https://example.com", expires_at: future }],
+      })
+      .mockResolvedValueOnce({
+        rows: [{ clicks: 1 }],
+      });
 
     const response = await request(app).get("/abc123");
 
     expect(response.statusCode).toBe(301);
     expect(response.headers.location).toBe("https://example.com");
-    expect(db.query).toHaveBeenCalledTimes(1);
+    expect(db.query).toHaveBeenCalledTimes(2);
   });
 
   it("should return 404 when code does not exist", async () => {

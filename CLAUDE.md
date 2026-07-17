@@ -1,6 +1,6 @@
 # CLAUDE.md — URL Shortener Development Guide
 
-**Status:** Stage 3 In Progress 🔄  
+**Status:** Stage 3 Complete ✅ — next: Stage 4 (Horizontal Scale)
 **Read first:** `ROADMAP.md` (design decisions, trade-offs, interview concepts)
 
 ---
@@ -160,12 +160,12 @@ Run `npm test` before PR.
 
 ---
 
-## Stage 3 Remaining Tasks
+## Stage 3 Complete (2026-07-17)
 
-- [ ] S3-T6: Stress test — target 10K+ req/sec, document cache hit rate + p99
-- [ ] S3-T7: Chaos test — kill Redis mid-stress, confirm graceful degradation to DB
+- [x] S3-T6: Stress test — **100% cache hit rate**; redirect RPS capped ~4–7K by sync click UPDATE (not 10K). Gate to Stage 6 confirmed.
+- [x] S3-T7: Chaos test — Redis SIGKILL mid-stress → **0 errors**, 100% 301s. Needed `disableOfflineQueue` + op timeout so commands do not hang.
 
-See `ROADMAP.md` for full Stage 3 design.
+See `ROADMAP.md` Stage 3 postmortem. Next: Stage 4 (S4-T1 rate limiter → Redis).
 
 ---
 
@@ -180,4 +180,4 @@ See `ROADMAP.md` for full Stage 3 design.
 
 ---
 
-**Last updated:** 2026-06-29 (Stage 3 in progress — cache-aside implemented)
+**Last updated:** 2026-07-17 (Stage 3 complete — stress + chaos documented; Redis fail-open hardened)

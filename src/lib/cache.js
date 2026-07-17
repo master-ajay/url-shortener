@@ -3,18 +3,35 @@ const redisClient = require("../config/redis");
 // Single-flight map: key → Promise (prevents cache stampede)
 const inFlight = new Map();
 
+const REDIS_OP_TIMEOUT_MS = 200;
+
+function withTimeout(promise, ms) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error("redis op timeout")), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
 async function get(key) {
   try {
-    const val = await redisClient.get(key);
+    if (!redisClient.isReady) return null;
+    const val = await withTimeout(redisClient.get(key), REDIS_OP_TIMEOUT_MS);
     return val ? JSON.parse(val) : null;
   } catch {
-    return null; // Redis down → treat as miss
+    return null; // Redis down / slow → treat as miss
   }
 }
 
 async function set(key, value, ttlSeconds) {
   try {
-    await redisClient.set(key, JSON.stringify(value), { EX: ttlSeconds });
+    if (!redisClient.isReady) return;
+    await withTimeout(
+      redisClient.set(key, JSON.stringify(value), { EX: ttlSeconds }),
+      REDIS_OP_TIMEOUT_MS,
+    );
   } catch {
     // Redis down → non-fatal, DB result still returned to client
   }
@@ -22,7 +39,8 @@ async function set(key, value, ttlSeconds) {
 
 async function del(key) {
   try {
-    await redisClient.del(key);
+    if (!redisClient.isReady) return;
+    await withTimeout(redisClient.del(key), REDIS_OP_TIMEOUT_MS);
   } catch {
     // Redis down → stale key will expire on its own via TTL
   }
