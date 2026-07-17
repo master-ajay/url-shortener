@@ -204,5 +204,18 @@ describe("POST /shorten", () => {
         { EX: 300 },
       );
     });
+
+    it("creates short url even when redis pre-warm fails", async () => {
+      db.query.mockResolvedValueOnce({ rows: [insertedRow] });
+      redis.set.mockRejectedValueOnce(new Error("redis set failed"));
+
+      const response = await request(app)
+        .post("/shorten")
+        .send({ url: "https://www.example.com/very/long/url/path" });
+
+      expect(response.statusCode).toBe(201);
+      expect(response.body.success).toBe(true);
+      expect(db.query).toHaveBeenCalledTimes(1);
+    });
   });
 });

@@ -109,4 +109,13 @@ describe("GET /stats/:code — Stage 2", () => {
     expect(redis.get).not.toHaveBeenCalled();
     expect(redis.set).not.toHaveBeenCalled();
   });
+
+  it("returns 500 when stats query fails", async () => {
+    db.query.mockRejectedValueOnce(new Error("stats query failed"));
+
+    const response = await request(app).get("/stats/live123");
+
+    expect(response.statusCode).toBe(500);
+    expect(response.body.message).toBe("stats query failed");
+  });
 });

@@ -148,5 +148,34 @@ describe("cache — Stage 3", () => {
       expect(result).toBeNull();
       expect(redisClient.set).not.toHaveBeenCalled();
     });
+
+    it("coalesces concurrent misses into a single loader call", async () => {
+      redisClient.get.mockResolvedValue(null);
+      redisClient.set.mockResolvedValueOnce("OK");
+
+      const row = {
+        original_url: "https://example.com",
+        expires_at: "2099-01-01T00:00:00.000Z",
+      };
+
+      let resolveLoader;
+      const loader = jest.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveLoader = resolve;
+          }),
+      );
+
+      const first = cache.wrap("url:abc", 300, loader);
+      const second = cache.wrap("url:abc", 300, loader);
+
+      await Promise.resolve();
+      expect(loader).toHaveBeenCalledTimes(1);
+
+      resolveLoader(row);
+
+      await expect(Promise.all([first, second])).resolves.toEqual([row, row]);
+      expect(redisClient.set).toHaveBeenCalledTimes(1);
+    });
   });
 });

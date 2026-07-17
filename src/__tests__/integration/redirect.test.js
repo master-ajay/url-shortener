@@ -97,6 +97,21 @@ describe("GET /:code", () => {
         false,
       );
     });
+
+    it("returns 500 when click update fails", async () => {
+      db.query
+        .mockResolvedValueOnce({
+          rows: [
+            { original_url: "https://example.com", expires_at: future() },
+          ],
+        })
+        .mockRejectedValueOnce(new Error("update failed"));
+
+      const response = await request(app).get("/abc123");
+
+      expect(response.statusCode).toBe(500);
+      expect(response.body.message).toBe("update failed");
+    });
   });
 
   describe("Stage 3 — cache-aside", () => {
@@ -152,6 +167,22 @@ describe("GET /:code", () => {
       expect(db.query).not.toHaveBeenCalled();
     });
 
+    it("still returns 410 when cache delete fails on expired url", async () => {
+      redis.get.mockResolvedValueOnce(
+        JSON.stringify({
+          original_url: "https://example.com/expired",
+          expires_at: past(),
+        }),
+      );
+      redis.del.mockRejectedValueOnce(new Error("redis delete failed"));
+
+      const response = await request(app).get("/expired1");
+
+      expect(response.statusCode).toBe(410);
+      expect(response.body.message).toBe("URL has expired");
+      expect(db.query).not.toHaveBeenCalled();
+    });
+
     it("falls back to DB when redis is down", async () => {
       redis.isReady = false;
       db.query
@@ -167,6 +198,24 @@ describe("GET /:code", () => {
       expect(response.statusCode).toBe(301);
       expect(response.headers.location).toBe("https://example.com");
       expect(redis.get).not.toHaveBeenCalled();
+      expect(db.query).toHaveBeenCalledTimes(2);
+    });
+
+    it("still redirects when redis set fails after cache miss", async () => {
+      redis.get.mockResolvedValueOnce(null);
+      redis.set.mockRejectedValueOnce(new Error("redis set failed"));
+      db.query
+        .mockResolvedValueOnce({
+          rows: [
+            { original_url: "https://example.com", expires_at: future() },
+          ],
+        })
+        .mockResolvedValueOnce({ rows: [{ clicks: 1 }] });
+
+      const response = await request(app).get("/abc123");
+
+      expect(response.statusCode).toBe(301);
+      expect(response.headers.location).toBe("https://example.com");
       expect(db.query).toHaveBeenCalledTimes(2);
     });
   });
