@@ -3,7 +3,7 @@ const cors = require("cors");
 
 const routes = require("./routes/url.routes");
 const limiter = require("./middleware/rateLimiter");
-const errorHandler = require("./middleware/errorHandler");
+const errorHandler = require("./middleware/errorhandler");
 const httpLogger = require("./middleware/httpLogger");
 const requestId = require("./middleware/requestId");
 const helmet = require("helmet");

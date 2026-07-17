@@ -13,6 +13,7 @@ describe("POST /shorten", () => {
     original_url: "https://www.example.com/very/long/url/path",
     expires_at: new Date(Date.now() + 30 * 86400000).toISOString(),
   };
+  const ORIGINAL_BASE_URL = process.env.BASE_URL;
 
   beforeEach(() => {
     db.query.mockReset();
@@ -20,7 +21,11 @@ describe("POST /shorten", () => {
     redis.set.mockReset().mockResolvedValue("OK");
     redis.del.mockReset().mockResolvedValue(1);
     redis.isReady = true;
-    process.env.BASE_URL = process.env.BASE_URL || "http://localhost:3000";
+    process.env.BASE_URL = "http://localhost:3000";
+  });
+
+  afterAll(() => {
+    process.env.BASE_URL = ORIGINAL_BASE_URL;
   });
 
   describe("Stage 0/1 — create + validation", () => {
@@ -73,6 +78,18 @@ describe("POST /shorten", () => {
 
       expect(response.statusCode).toBe(500);
       expect(response.body.message).toBe("connection refused");
+    });
+
+    it("returns 500 before insert when BASE_URL is missing", async () => {
+      delete process.env.BASE_URL;
+
+      const response = await request(app)
+        .post("/shorten")
+        .send({ url: "https://example.com" });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.body.message).toBe("BASE_URL is not configured");
+      expect(db.query).not.toHaveBeenCalled();
     });
 
     it("retries once on short-code collision", async () => {
@@ -152,7 +169,7 @@ describe("POST /shorten", () => {
     it("returns 400 when custom_code is too long", async () => {
       const response = await request(app)
         .post("/shorten")
-        .send({ url: "https://example.com", custom_code: "a".repeat(21) });
+        .send({ url: "https://example.com", custom_code: "a".repeat(11) });
 
       expect(response.statusCode).toBe(400);
       expect(db.query).not.toHaveBeenCalled();

@@ -7,7 +7,7 @@ const shortenUrlSchema = z.object({
     custom_code: z
       .string()
       .min(3, "Code must have atleast 3 characters")
-      .max(20, "Code must have max 20 characters")
+      .max(10, "Code must have max 10 characters")
       .regex(/^[a-zA-Z0-9]*$/, "Code must contain only lowercase letters and numbers")
       .optional(),
   }),
@@ -16,14 +16,14 @@ const shortenUrlSchema = z.object({
 // Params Validation
 const redirectSchema = z.object({
   params: z.object({
-    code: z.string().min(3, "Code too short").max(20, "Code too long"),
+    code: z.string().min(3, "Code too short").max(10, "Code too long"),
   }),
 });
 
 // Params Validation
 const statsSchema = z.object({
   params: z.object({
-    code: z.string().min(3, "Code too short").max(20, "Code too long"),
+    code: z.string().min(3, "Code too short").max(10, "Code too long"),
   }),
 });
 

@@ -1,4 +1,4 @@
-const { BASE_URL } = require("../config/env");
+const { getBaseUrl } = require("../config/env");
 const {
   createShortUrl,
   getOriginalUrl,
@@ -12,12 +12,13 @@ const { shortenResponseSchema } = require("../validators/url.validator");
 
 const shorten = asyncHandler(async (req, res) => {
   const { url, custom_code } = req.body;
+  const baseUrl = getBaseUrl();
 
   const code = await createShortUrl(url, custom_code);
 
   const responseData = {
     code,
-    short_url: `${BASE_URL}/${code}`,
+    short_url: `${baseUrl}/${code}`,
   };
 
   shortenResponseSchema.parse(responseData);

@@ -82,9 +82,7 @@ describe("GET /stats/:code — Stage 2", () => {
   });
 
   it("returns 400 when code is too long", async () => {
-    const response = await request(app).get(
-      "/stats/aVeryLongCodeThatExceedsTwentyChars",
-    );
+    const response = await request(app).get("/stats/abcdefghijk");
 
     expect(response.statusCode).toBe(400);
     expect(db.query).not.toHaveBeenCalled();

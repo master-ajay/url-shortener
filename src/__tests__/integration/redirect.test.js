@@ -52,9 +52,7 @@ describe("GET /:code", () => {
     });
 
     it("returns 400 when code is too long", async () => {
-      const response = await request(app).get(
-        "/aVeryLongCodeThatExceedsTwentyChars",
-      );
+      const response = await request(app).get("/abcdefghijk");
 
       expect(response.statusCode).toBe(400);
       expect(db.query).not.toHaveBeenCalled();
