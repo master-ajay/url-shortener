@@ -60,17 +60,19 @@ describe("cache — Stage 3", () => {
   });
 
   describe("set", () => {
-    it("writes JSON with TTL", async () => {
+    it("writes JSON with jittered TTL", async () => {
       redisClient.set.mockResolvedValueOnce("OK");
       const payload = { original_url: "https://example.com" };
+      jest.spyOn(Math, "random").mockReturnValueOnce(0.5); // floor(0.5*60)=30 → TTL 330
 
       await cache.set("url:abc", payload, 300);
 
       expect(redisClient.set).toHaveBeenCalledWith(
         "url:abc",
         JSON.stringify(payload),
-        { EX: 300 },
+        { EX: 330 },
       );
+      Math.random.mockRestore();
     });
 
     it("is a no-op when redis is not ready", async () => {
@@ -87,6 +89,32 @@ describe("cache — Stage 3", () => {
       await expect(
         cache.set("url:abc", { x: 1 }, 300),
       ).resolves.toBeUndefined();
+    });
+  });
+
+  describe("TTL jitter — Stage 4", () => {
+    it("withJitter returns base TTL when random is 0", () => {
+      jest.spyOn(Math, "random").mockReturnValueOnce(0);
+      expect(cache.withJitter(300)).toBe(300);
+      Math.random.mockRestore();
+    });
+
+    it("withJitter adds up to jitter-1 seconds", () => {
+      jest.spyOn(Math, "random").mockReturnValueOnce(0.999);
+      expect(cache.withJitter(300)).toBe(300 + 59);
+      Math.random.mockRestore();
+    });
+
+    it("withJitter leaves non-positive TTL unchanged", () => {
+      expect(cache.withJitter(0)).toBe(0);
+      expect(cache.withJitter(-1)).toBe(-1);
+    });
+
+    it("spread of many TTLs stays within [base, base+jitter)", () => {
+      const samples = Array.from({ length: 200 }, () => cache.withJitter(300));
+      expect(Math.min(...samples)).toBeGreaterThanOrEqual(300);
+      expect(Math.max(...samples)).toBeLessThan(300 + cache.TTL_JITTER_SECONDS);
+      expect(new Set(samples).size).toBeGreaterThan(1);
     });
   });
 
@@ -135,8 +163,13 @@ describe("cache — Stage 3", () => {
       expect(redisClient.set).toHaveBeenCalledWith(
         "url:abc",
         JSON.stringify(row),
-        { EX: 300 },
+        expect.objectContaining({
+          EX: expect.any(Number),
+        }),
       );
+      const ttl = redisClient.set.mock.calls[0][2].EX;
+      expect(ttl).toBeGreaterThanOrEqual(300);
+      expect(ttl).toBeLessThan(300 + cache.TTL_JITTER_SECONDS);
     });
 
     it("does not cache null loader results", async () => {
@@ -150,8 +183,15 @@ describe("cache — Stage 3", () => {
     });
 
     it("coalesces concurrent misses into a single loader call", async () => {
-      redisClient.get.mockResolvedValue(null);
-      redisClient.set.mockResolvedValueOnce("OK");
+      // Defer redis GET so both wraps enter before either registers inFlight
+      const releaseGets = [];
+      redisClient.get.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            releaseGets.push(() => resolve(null));
+          }),
+      );
+      redisClient.set.mockResolvedValue("OK");
 
       const row = {
         original_url: "https://example.com",
@@ -169,11 +209,21 @@ describe("cache — Stage 3", () => {
       const first = cache.wrap("url:abc", 300, loader);
       const second = cache.wrap("url:abc", 300, loader);
 
-      await Promise.resolve();
+      expect(releaseGets.length).toBe(2);
+
+      // First GET completes → first wrap owns inFlight + calls loader
+      releaseGets[0]();
+      await new Promise((r) => setImmediate(r));
+      await new Promise((r) => setImmediate(r));
+      expect(loader).toHaveBeenCalledTimes(1);
+
+      // Second GET completes → should reuse inFlight, not call loader again
+      releaseGets[1]();
+      await new Promise((r) => setImmediate(r));
+      await new Promise((r) => setImmediate(r));
       expect(loader).toHaveBeenCalledTimes(1);
 
       resolveLoader(row);
-
       await expect(Promise.all([first, second])).resolves.toEqual([row, row]);
       expect(redisClient.set).toHaveBeenCalledTimes(1);
     });

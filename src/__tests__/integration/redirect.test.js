@@ -38,7 +38,8 @@ describe("GET /:code", () => {
     it("returns 404 when code does not exist", async () => {
       db.query.mockResolvedValueOnce({ rows: [] });
 
-      const response = await request(app).get("/missingcode");
+      // code length must be 3–10 so Zod passes and service returns 404
+      const response = await request(app).get("/nosuch1");
 
       expect(response.statusCode).toBe(404);
       expect(response.body.message).toBe("code not found");
@@ -146,8 +147,11 @@ describe("GET /:code", () => {
       expect(redis.set).toHaveBeenCalledWith(
         "url:miss123",
         JSON.stringify(row),
-        { EX: 300 },
+        expect.objectContaining({ EX: expect.any(Number) }),
       );
+      const ttl = redis.set.mock.calls[0][2].EX;
+      expect(ttl).toBeGreaterThanOrEqual(300);
+      expect(ttl).toBeLessThan(360);
     });
 
     it("deletes cache entry on 410 expired", async () => {

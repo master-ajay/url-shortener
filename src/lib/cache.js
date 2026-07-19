@@ -4,6 +4,8 @@ const redisClient = require("../config/redis");
 const inFlight = new Map();
 
 const REDIS_OP_TIMEOUT_MS = 200;
+// S4-T2: spread expiry so N nodes don't stampede Postgres when many keys die together
+const TTL_JITTER_SECONDS = 60;
 
 function withTimeout(promise, ms) {
   let timer;
@@ -14,6 +16,15 @@ function withTimeout(promise, ms) {
       if (typeof timer.unref === "function") timer.unref();
     }),
   ]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * BASE_TTL + random(0 .. JITTER-1) → e.g. 300 + [0,59] = 300–359 seconds.
+ * Keeps average near BASE_TTL while desynchronizing mass expiry (avalanche).
+ */
+function withJitter(ttlSeconds, jitterSeconds = TTL_JITTER_SECONDS) {
+  if (ttlSeconds == null || ttlSeconds <= 0) return ttlSeconds;
+  return ttlSeconds + Math.floor(Math.random() * jitterSeconds);
 }
 
 async function get(key) {
@@ -29,8 +40,9 @@ async function get(key) {
 async function set(key, value, ttlSeconds) {
   try {
     if (!redisClient.isReady) return;
+    const ttl = withJitter(ttlSeconds);
     await withTimeout(
-      redisClient.set(key, JSON.stringify(value), { EX: ttlSeconds }),
+      redisClient.set(key, JSON.stringify(value), { EX: ttl }),
       REDIS_OP_TIMEOUT_MS,
     );
   } catch {
@@ -65,4 +77,4 @@ async function wrap(key, ttlSeconds, fn) {
   return promise;
 }
 
-module.exports = { get, set, del, wrap };
+module.exports = { get, set, del, wrap, withJitter, TTL_JITTER_SECONDS };

@@ -197,8 +197,11 @@ describe("POST /shorten", () => {
       expect(redis.set).toHaveBeenCalledWith(
         `url:${response.body.data.code}`,
         JSON.stringify(insertedRow),
-        { EX: 300 },
+        expect.objectContaining({ EX: expect.any(Number) }),
       );
+      const ttl = redis.set.mock.calls[0][2].EX;
+      expect(ttl).toBeGreaterThanOrEqual(300);
+      expect(ttl).toBeLessThan(360);
     });
 
     it("pre-warms redis for custom_code create", async () => {
@@ -218,8 +221,11 @@ describe("POST /shorten", () => {
       expect(redis.set).toHaveBeenCalledWith(
         "url:warmcode",
         JSON.stringify(row),
-        { EX: 300 },
+        expect.objectContaining({ EX: expect.any(Number) }),
       );
+      const ttl = redis.set.mock.calls[0][2].EX;
+      expect(ttl).toBeGreaterThanOrEqual(300);
+      expect(ttl).toBeLessThan(360);
     });
 
     it("creates short url even when redis pre-warm fails", async () => {
