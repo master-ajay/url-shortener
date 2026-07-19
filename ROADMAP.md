@@ -467,7 +467,7 @@ We need N processes serving traffic, fronted by a load balancer. This is the mom
 
 ### Tasks (Stage 4)
 
-- [ ] S4-T1: Audit codebase for in-process state; move rate limiter to Redis (`rate-limit-redis`)
+- [x] S4-T1: Audit codebase for in-process state; move rate limiter to Redis (`rate-limit-redis`) — **MemoryStore → RedisStore (`rl:` prefix); `passOnStoreError: true` (fail-open). Remaining in-process: `cache.js` inFlight Map (OK; stampede mitigated further by S4-T2 jitter).**
 - [ ] S4-T2: TTL jitter — `BASE_TTL + Math.floor(Math.random() * JITTER)` in `cache.js`. With N nodes sharing Redis, mass expiry = N× the stampede; jitter spreads it across a window.
 - [ ] S4-T3: Graceful shutdown — `server.close()`, drain pool, exit on SIGTERM
 - [ ] S4-T4: PM2 ecosystem file, cluster mode with `instances: max`

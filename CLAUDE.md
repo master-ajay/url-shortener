@@ -1,6 +1,6 @@
 # CLAUDE.md — URL Shortener Development Guide
 
-**Status:** Stage 3 Complete ✅ — next: Stage 4 (Horizontal Scale)
+**Status:** Stage 4 In Progress 🔄 — S4-T1 done (Redis rate limiter); next: S4-T2 (TTL jitter)
 **Read first:** `ROADMAP.md` (design decisions, trade-offs, interview concepts)
 
 ---
@@ -152,12 +152,11 @@ Run `npm test` before PR.
 
 ## Known Constraints
 
-- **Rate limiter:** 100 req/15 min (becomes bottleneck before DB at 6K+/sec)
+- **Rate limiter:** Redis-backed (`rl:` keys, shared across processes); fail-open if Redis down (`passOnStoreError`)
 - **TTL enforcement:** Lazy (check on read, not background cleanup)
 - **Custom code validation:** Must add denylist (reserved: admin, api, health, stats, etc.)
 - **Sync click increment:** Hot-row contention at 1K+ RPS — SELECT is now cached but UPDATE still hits DB on every redirect. Deferred to Stage 6 (Redis INCR + batch flush to DB).
 - **Cache TTL:** Fixed 300s — no jitter (thundering herd risk is low at single process; moved to S4-T2 where N nodes amplify the stampede)
-
 ---
 
 ## Stage 3 Complete (2026-07-17)
@@ -165,7 +164,7 @@ Run `npm test` before PR.
 - [x] S3-T6: Stress test — **100% cache hit rate**; redirect RPS capped ~4–7K by sync click UPDATE (not 10K). Gate to Stage 6 confirmed.
 - [x] S3-T7: Chaos test — Redis SIGKILL mid-stress → **0 errors**, 100% 301s. Needed `disableOfflineQueue` + op timeout so commands do not hang.
 
-See `ROADMAP.md` Stage 3 postmortem. Next: Stage 4 (S4-T1 rate limiter → Redis).
+See `ROADMAP.md` Stage 3 postmortem. Stage 4: S4-T1 ✅ Redis rate limiter; next S4-T2 TTL jitter.
 
 ---
 
